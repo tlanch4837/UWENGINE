@@ -1,6 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <title>Rule Evaluator</title>
+</head>
+<body>
+<script>
+const ALLOWED_IDENTIFIERS = new Set(["age", "years", "face"]);
+const BOOLEAN_LITERALS = new Set(["true", "false"]);
+const ALLOWED_OPERATORS = new Set([
+  "&&", "||", "!", ">=", "<=", "===", "!==", "==", "!=", ">", "<",
+  "+", "-", "*", "/", "%", "(", ")"
+]);
+const TOKEN_PATTERN = /\s+|[()!]|&&|\|\||>=|<=|===|!==|==|!=|>|<|\+|-|\*|\/|%|[A-Za-z_][A-Za-z0-9_]*|\d*\.?\d+(?:[eE][+-]?\d+)?/g;
+
+function sanitizeCriteriaExpression(expr) {
+  if (typeof expr !== "string") {
+    return null;
+  }
+
+  let sanitized = "";
+  let lastIndex = 0;
+  TOKEN_PATTERN.lastIndex = 0;
+  let match;
+
+  while ((match = TOKEN_PATTERN.exec(expr)) !== null) {
+    if (match.index !== lastIndex) {
+      return null;
+    }
+
+    const token = match[0];
+    lastIndex = TOKEN_PATTERN.lastIndex;
+
+    if (/^\s+$/.test(token)) {
+      sanitized += " ";
+      continue;
+    }
+
+    if (ALLOWED_OPERATORS.has(token)) {
+      sanitized += token;
+      continue;
+    }
+
+    if (/^\d/.test(token)) {
+      const num = Number(token);
+      if (!Number.isFinite(num)) {
+        return null;
+      }
+      sanitized += String(num);
+      continue;
+    }
+
+    if (BOOLEAN_LITERALS.has(token)) {
+      sanitized += token;
+      continue;
+    }
+
+    if (ALLOWED_IDENTIFIERS.has(token)) {
+      sanitized += `ctx["${token}"]`;
+      continue;
+    }
+
+    return null;
+  }
+
+  if (lastIndex !== expr.length) {
+    return null;
+  }
+
+  return sanitized.trim();
+}
+
+function safeEvaluateBooleanExpression(sanitizedExpression, ctx) {
+  if (!sanitizedExpression) {
+    return false;
+  }
+
+  try {
+    const evaluator = new Function("ctx", '"use strict"; return (' + sanitizedExpression + ');');
+    const result = evaluator(ctx ?? {});
+    return Boolean(result);
+  } catch (error) {
+    return false;
+  }
+}
+
+function criteria_matches(expr, ctx) {
+  const sanitized = sanitizeCriteriaExpression(expr);
+  return safeEvaluateBooleanExpression(sanitized, ctx);
+}
+
+function best_rule_for_condition(cond, ctx) {
+  const rules = Array.isArray(cond) ? cond : cond && Array.isArray(cond.rules) ? cond.rules : null;
+  if (!rules) {
+    return null;
+  }
+
+  for (const rule of rules) {
+    if (!rule || typeof rule.criteria !== "string") {
+      continue;
+    }
+
+    if (criteria_matches(rule.criteria, ctx)) {
+      return rule;
+    }
+  }
+
+  return null;
+}
+</script>
+=======
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Carrier Leaderboard</title>
