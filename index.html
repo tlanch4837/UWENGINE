@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>UW Engine</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 2rem;
+      line-height: 1.6;
+      color: #222;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>UW Engine Demo</h1>
+  <p>This page hosts the underwriting helper logic for logging, slip computation, and leaderboard annotation.</p>
+
+  <script>
+  (function () {
+    const LOG_STORAGE_KEY = 'uw_logs';
+    const globalScope = typeof globalThis !== 'undefined' ? globalThis : window;
+    let cachedLogs = null;
+    let currentEvaluationInput = null;
+
+    function ensureArray(value) {
+      return Array.isArray(value) ? value : [];
+    }
+
+    function normalizeCarrier(value) {
+      if (value == null) {
+        return null;
+      }
+      const raw = typeof value === 'object' ? (value.name || value.label || value.id) : value;
+      return raw == null ? null : String(raw).trim().toLowerCase();
+    }
+
+    function normalizeCondition(value) {
+      if (value == null) {
+        return null;
+      }
+      if (typeof value === 'object') {
+        if ('dominantCondition' in value) {
+          return normalizeCondition(value.dominantCondition);
+        }
+        return normalizeCondition(value.name || value.label || value.code || value.id);
+      }
+      const str = String(value).trim().toLowerCase();
+      return str || null;
+    }
+
+    function normalizeOutcome(value) {
+      if (value == null) {
+        return null;
+      }
+      if (typeof value === 'object') {
+        if ('outcome' in value) return normalizeOutcome(value.outcome);
+        if ('result' in value) return normalizeOutcome(value.result);
+        if ('decision' in value) return normalizeOutcome(value.decision);
+        if ('value' in value) return normalizeOutcome(value.value);
+        if ('label' in value) return normalizeOutcome(value.label);
+      }
+      if (typeof value === 'boolean') {
+        return value ? 'approve' : 'decline';
+      }
+      if (typeof value === 'number') {
+        if (!Number.isFinite(value)) return null;
+        return value > 0 ? 'approve' : 'decline';
+      }
+      const str = String(value).trim().toLowerCase();
+      if (!str) return null;
+      if (['approve', 'approved', 'accept', 'accepted', 'yes', 'true', 'pass', 'positive', 'green'].includes(str)) {
+        return 'approve';
+      }
+      if (['decline', 'declined', 'reject', 'rejected', 'no', 'false', 'fail', 'negative', 'red', 'deny', 'denied'].includes(str)) {
+        return 'decline';
+      }
+      return str;
+    }
+
+    function extractStrict(decision) {
+      if (!decision || typeof decision !== 'object') return null;
+      if ('strictPrediction' in decision) return decision.strictPrediction;
+      if ('strict' in decision) return decision.strict;
+      if (decision.predictions && 'strict' in decision.predictions) return decision.predictions.strict;
+      if (decision.results && 'strict' in decision.results) return decision.results.strict;
+      if (decision.decision && 'strict' in decision.decision) return decision.decision.strict;
+      return null;
+    }
+
+    function extractTop(decision) {
+      if (!decision || typeof decision !== 'object') return null;
+      if ('topPrediction' in decision) return decision.topPrediction;
+      if ('top' in decision) return decision.top;
+      if (decision.predictions && 'top' in decision.predictions) return decision.predictions.top;
+      if (decision.results && 'top' in decision.results) return decision.results.top;
+      if (decision.decision && 'top' in decision.decision) return decision.decision.top;
+      return null;
+    }
+
+    function extractProbabilityMix(decision) {
+      if (!decision || typeof decision !== 'object') {
+        return {};
+      }
+      const source = decision.probabilityMix || decision.probabilities || decision.probability || null;
+      const mix = {};
+      if (!source) {
+        return mix;
+      }
+      if (Array.isArray(source)) {
+        source.forEach((entry, idx) => {
+          if (entry == null) return;
+          if (typeof entry === 'object') {
+            const key = entry.label || entry.name || entry.bucket || String(idx);
+            const numeric = Number(entry.value ?? entry.score ?? entry.probability ?? entry.weight);
+            if (Number.isFinite(numeric)) {
+              mix[key] = numeric;
+            }
+          } else {
+            const numeric = Number(entry);
+            if (Number.isFinite(numeric)) {
+              mix[String(idx)] = numeric;
+            }
+          }
+        });
+      } else if (typeof source === 'object') {
+        Object.entries(source).forEach(([key, value]) => {
+          const numeric = Number(value);
+          if (Number.isFinite(numeric)) {
+            mix[key] = numeric;
+          }
+        });
+      } else {
+        const numeric = Number(source);
+        if (Number.isFinite(numeric)) {
+          mix.default = numeric;
+        }
+      }
+      const total = Object.values(mix).reduce((acc, value) => acc + (Number.isFinite(value) ? value : 0), 0);
+      if (total > 0) {
+        Object.keys(mix).forEach((key) => {
+          mix[key] = mix[key] / total;
+        });
+      }
+      return mix;
+    }
+
+    function extractCarrier(decision, input) {
+      if (input && typeof input === 'object') {
+        if (input.carrierName) return input.carrierName;
+        if (input.carrier) return input.carrier;
+        if (input.insurer) return input.insurer;
+      }
+      if (decision && typeof decision === 'object') {
+        if (decision.carrierName) return decision.carrierName;
+        if (decision.carrier) return decision.carrier;
+      }
+      return null;
+    }
+
+    function extractCondition(input, decision) {
+      const candidate = (input && typeof input === 'object' && (input.dominantCondition || input.dominant_condition || input.condition))
+        || (decision && typeof decision === 'object' && (decision.dominantCondition || decision.condition || decision.conditionName));
+      if (!candidate) return null;
+      if (typeof candidate === 'object') {
+        return candidate.name || candidate.label || candidate.code || candidate.id || null;
+      }
+      return candidate;
+    }
+
+    function cloneData(value) {
+      try {
+        return value == null ? null : JSON.parse(JSON.stringify(value));
+      } catch (error) {
+        console.warn('Unable to clone data for log entry', error);
+        return value;
+      }
+    }
+
+    function storageAvailable() {
+      try {
+        if (typeof localStorage === 'undefined') return false;
+        const key = '__uw_storage_check__';
+        localStorage.setItem(key, '1');
+        localStorage.removeItem(key);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function readFromStorage() {
+      if (!storageAvailable()) {
+        if (!globalScope.__UW_LOG_MEMORY__) {
+          globalScope.__UW_LOG_MEMORY__ = [];
+        }
+        return ensureArray(globalScope.__UW_LOG_MEMORY__).map((entry) => ({ ...entry }));
+      }
+      const raw = localStorage.getItem(LOG_STORAGE_KEY);
+      if (!raw) {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        return ensureArray(parsed);
+      } catch (error) {
+        console.warn('Failed to parse stored logs, resetting log storage.', error);
+        localStorage.removeItem(LOG_STORAGE_KEY);
+        return [];
+      }
+    }
+
+    function writeToStorage(logs) {
+      if (!Array.isArray(logs)) {
+        return;
+      }
+      if (!storageAvailable()) {
+        globalScope.__UW_LOG_MEMORY__ = logs.map((entry) => ({ ...entry }));
+        return;
+      }
+      localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logs));
+    }
+
+    function load_logs_from_storage() {
+      if (!Array.isArray(cachedLogs)) {
+        cachedLogs = readFromStorage();
+      }
+      return cachedLogs.slice();
+    }
+
+    function save_logs_to_storage(logs) {
+      cachedLogs = ensureArray(logs).map((entry) => ({ ...entry }));
+      writeToStorage(cachedLogs);
+      return cachedLogs.slice();
+    }
+
+    function binValue(value, size, label) {
+      if (!Number.isFinite(value)) {
+        return `${label}:unknown`;
+      }
+      if (value < 0) {
+        return `${label}:unknown`;
+      }
+      const start = Math.floor(value / size) * size;
+      const end = start + size - 1;
+      return `${label}:${start}-${end}`;
+    }
+
+    function binYears(value) {
+      if (!Number.isFinite(value)) {
+        return 'years:unknown';
+      }
+      if (value < 1) {
+        return 'years:<1';
+      }
+      if (value >= 30) {
+        return 'years:30+';
+      }
+      return binValue(value, value < 5 ? 1 : 5, 'years');
+    }
+
+    function binAge(value) {
+      if (!Number.isFinite(value)) {
+        return 'age:unknown';
+      }
+      if (value < 0) {
+        return 'age:unknown';
+      }
+      if (value >= 90) {
+        return 'age:90+';
+      }
+      return binValue(value, 5, 'age');
+    }
+
+    function toNumber(value) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : NaN;
+    }
+
+    function bucket_key(input) {
+      if (!input || typeof input !== 'object') {
+        return 'condition:unknown|years:unknown|age:unknown';
+      }
+      const conditionName = extractCondition(input) || 'unknown';
+      const yearsCandidate = input.yearsInForce ?? input.yearsWithCondition ?? input.years ?? input.tenureYears ?? null;
+      const ageCandidate = input.age ?? input.insuredAge ?? input.applicantAge ?? input.clientAge ?? null;
+      const yearsValue = toNumber(yearsCandidate);
+      const ageValue = toNumber(ageCandidate);
+      const yearsBucket = binYears(yearsValue);
+      const ageBucket = binAge(ageValue);
+      return `condition:${String(conditionName).toLowerCase()}|${yearsBucket}|${ageBucket}`;
+    }
+
+    function append_log(decision, input, actualOutcome) {
+      const strictPrediction = extractStrict(decision);
+      const topPrediction = extractTop(decision);
+      const normalizedStrict = normalizeOutcome(strictPrediction);
+      const normalizedTop = normalizeOutcome(topPrediction);
+      const normalizedActual = normalizeOutcome(actualOutcome);
+      const probabilityMix = extractProbabilityMix(decision);
+      const carrier = extractCarrier(decision, input);
+      const condition = extractCondition(input, decision);
+      const bucket = bucket_key(input || currentEvaluationInput || {});
+
+      currentEvaluationInput = input || currentEvaluationInput || null;
+
+      const entry = {
+        timestamp: new Date().toISOString(),
+        carrierName: carrier || null,
+        conditionName: condition || null,
+        bucket,
+        decision: {
+          strict: strictPrediction ?? null,
+          top: topPrediction ?? null,
+          normalizedStrict,
+          normalizedTop,
+        },
+        actualOutcome: cloneData(actualOutcome),
+        normalizedActual,
+        probabilityMix,
+        inputSnapshot: cloneData(input),
+      };
+      entry.isSlip = Boolean(normalizedStrict && normalizedActual && normalizedStrict !== normalizedActual);
+
+      const logs = load_logs_from_storage();
+      logs.push(entry);
+      save_logs_to_storage(logs);
+      return entry;
+    }
+
+    function compute_slip_stats(carrierName, conditionName) {
+      const logs = load_logs_from_storage();
+      const normalizedCarrier = normalizeCarrier(carrierName);
+      const normalizedCondition = normalizeCondition(conditionName);
+      const evaluationBucket = currentEvaluationInput ? bucket_key(currentEvaluationInput) : null;
+
+      const relevantLogs = logs.filter((log) => {
+        if (!log) return false;
+        if (normalizedCarrier) {
+          const candidate = normalizeCarrier(log.carrierName);
+          if (!candidate || candidate !== normalizedCarrier) return false;
+        }
+        if (normalizedCondition) {
+          const candidateCondition = normalizeCondition(log.conditionName);
+          if (!candidateCondition || candidateCondition !== normalizedCondition) return false;
+        }
+        if (evaluationBucket && log.bucket && log.bucket !== evaluationBucket) {
+          return false;
+        }
+        return true;
+      });
+
+      const total = relevantLogs.length;
+      const slips = relevantLogs.reduce((count, log) => count + (log.isSlip ? 1 : 0), 0);
+      const slipRate = total > 0 ? slips / total : 0;
+      const flagged = total >= 100 && slipRate >= 0.5;
+
+      return {
+        carrierName: carrierName ?? null,
+        conditionName: conditionName ?? null,
+        bucket: evaluationBucket,
+        total,
+        slips,
+        slipRate,
+        flagged,
+      };
+    }
+
+    function annotate_with_slips(rows) {
+      if (!Array.isArray(rows)) {
+        return [];
+      }
+      const conditionName = currentEvaluationInput ? extractCondition(currentEvaluationInput) : null;
+      return rows.map((row) => {
+        if (!row || typeof row !== 'object') {
+          return row;
+        }
+        const carrierName = row.carrierName || row.carrier || row.name || null;
+        const stats = compute_slip_stats(carrierName, conditionName);
+        row.slipStats = stats;
+        return row;
+      });
+    }
+
+    function set_current_evaluation_input(input) {
+      currentEvaluationInput = input ? cloneData(input) : null;
+    }
+
+    // expose functions globally
+    globalScope.load_logs_from_storage = load_logs_from_storage;
+    globalScope.save_logs_to_storage = save_logs_to_storage;
+    globalScope.append_log = append_log;
+    globalScope.bucket_key = bucket_key;
+    globalScope.compute_slip_stats = compute_slip_stats;
+    globalScope.annotate_with_slips = annotate_with_slips;
+    globalScope.set_current_evaluation_input = set_current_evaluation_input;
+  })();
+  </script>
+</body>
+</html>
