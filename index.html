@@ -260,4 +260,339 @@
       GLOBAL_SCOPE.build_leaderboard = build_leaderboard;
     </script>
   </body>
+=======
+<head>
+  <meta charset="UTF-8">
+  <title>Rule Evaluator</title>
+</head>
+<body>
+<script>
+const ALLOWED_IDENTIFIERS = new Set(["age", "years", "face"]);
+const BOOLEAN_LITERALS = new Set(["true", "false"]);
+const ALLOWED_OPERATORS = new Set([
+  "&&", "||", "!", ">=", "<=", "===", "!==", "==", "!=", ">", "<",
+  "+", "-", "*", "/", "%", "(", ")"
+]);
+const TOKEN_PATTERN = /\s+|[()!]|&&|\|\||>=|<=|===|!==|==|!=|>|<|\+|-|\*|\/|%|[A-Za-z_][A-Za-z0-9_]*|\d*\.?\d+(?:[eE][+-]?\d+)?/g;
+
+function sanitizeCriteriaExpression(expr) {
+  if (typeof expr !== "string") {
+    return null;
+  }
+
+  let sanitized = "";
+  let lastIndex = 0;
+  TOKEN_PATTERN.lastIndex = 0;
+  let match;
+
+  while ((match = TOKEN_PATTERN.exec(expr)) !== null) {
+    if (match.index !== lastIndex) {
+      return null;
+    }
+
+    const token = match[0];
+    lastIndex = TOKEN_PATTERN.lastIndex;
+
+    if (/^\s+$/.test(token)) {
+      sanitized += " ";
+      continue;
+    }
+
+    if (ALLOWED_OPERATORS.has(token)) {
+      sanitized += token;
+      continue;
+    }
+
+    if (/^\d/.test(token)) {
+      const num = Number(token);
+      if (!Number.isFinite(num)) {
+        return null;
+      }
+      sanitized += String(num);
+      continue;
+    }
+
+    if (BOOLEAN_LITERALS.has(token)) {
+      sanitized += token;
+      continue;
+    }
+
+    if (ALLOWED_IDENTIFIERS.has(token)) {
+      sanitized += `ctx["${token}"]`;
+      continue;
+    }
+
+    return null;
+  }
+
+  if (lastIndex !== expr.length) {
+    return null;
+  }
+
+  return sanitized.trim();
+}
+
+function safeEvaluateBooleanExpression(sanitizedExpression, ctx) {
+  if (!sanitizedExpression) {
+    return false;
+  }
+
+  try {
+    const evaluator = new Function("ctx", '"use strict"; return (' + sanitizedExpression + ');');
+    const result = evaluator(ctx ?? {});
+    return Boolean(result);
+  } catch (error) {
+    return false;
+  }
+}
+
+function criteria_matches(expr, ctx) {
+  const sanitized = sanitizeCriteriaExpression(expr);
+  return safeEvaluateBooleanExpression(sanitized, ctx);
+}
+
+function best_rule_for_condition(cond, ctx) {
+  const rules = Array.isArray(cond) ? cond : cond && Array.isArray(cond.rules) ? cond.rules : null;
+  if (!rules) {
+    return null;
+  }
+
+  for (const rule of rules) {
+    if (!rule || typeof rule.criteria !== "string") {
+      continue;
+    }
+
+    if (criteria_matches(rule.criteria, ctx)) {
+      return rule;
+    }
+  }
+
+  return null;
+}
+</script>
+=======
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carrier Leaderboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: #0f1117;
+      color: #f0f3f9;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      width: 100%;
+      padding: 2rem;
+      box-sizing: border-box;
+    }
+
+    section {
+      background: #161b26;
+      border: 1px solid #252b3b;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    h1, h2 {
+      margin: 0;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      font-size: 0.95rem;
+      color: #ced4f2;
+    }
+
+    input, select, button {
+      background: #1f2533;
+      border: 1px solid #2e364a;
+      border-radius: 8px;
+      color: inherit;
+      padding: 0.6rem 0.8rem;
+      font-size: 0.95rem;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input:focus,
+    select:focus,
+    button:focus {
+      outline: none;
+      border-color: #4c82ff;
+      box-shadow: 0 0 0 2px rgba(76, 130, 255, 0.25);
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #111722;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #1f2838;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: #1d2534;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.8rem;
+      color: #8fa0c6;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #151c29;
+    }
+
+    .actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: auto;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>Carrier Input</h1>
+      <label>
+        Carrier Files
+        <input id="carrierFilesInput" type="file" multiple />
+      </label>
+      <label>
+        Conditions
+        <select id="conditionsSelect" multiple size="4"></select>
+      </label>
+      <label>
+        Medications
+        <input id="medsInput" type="text" placeholder="List medications" />
+      </label>
+      <label>
+        Age
+        <input id="ageInput" type="number" min="0" placeholder="Age" />
+      </label>
+      <label>
+        Years Enrolled
+        <input id="yearsInput" type="number" min="0" placeholder="Years" />
+      </label>
+      <label>
+        Face Value
+        <input id="faceInput" type="number" min="0" placeholder="Face value" />
+      </label>
+      <button id="evalButton" type="button">Evaluate Carrier</button>
+    </section>
+
+    <section>
+      <h2>Leaderboard</h2>
+      <table id="leaderboardTable">
+        <thead>
+          <tr>
+            <th>Carrier</th>
+            <th>Score</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="actions">
+        <label style="flex: 1 1 auto;">
+          Actual Outcome
+          <select id="actualOutcomeSelect"></select>
+        </label>
+        <button id="logButton" type="button">Log Outcome</button>
+      </div>
+
+      <h2>Log History</h2>
+      <table id="historyTable">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Carrier</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const state = { carriers: [], logs: [] };
+
+    function init_app() {
+      const leaderboardTable = document.getElementById('leaderboardTable');
+      const historyTable = document.getElementById('historyTable');
+
+      if (leaderboardTable && !leaderboardTable.querySelector('tbody')) {
+        leaderboardTable.appendChild(document.createElement('tbody'));
+      }
+
+      if (historyTable && !historyTable.querySelector('tbody')) {
+        historyTable.appendChild(document.createElement('tbody'));
+      }
+
+      // Placeholder options for demonstration purposes.
+      const conditionsSelect = document.getElementById('conditionsSelect');
+      const actualOutcomeSelect = document.getElementById('actualOutcomeSelect');
+
+      if (conditionsSelect && conditionsSelect.options.length === 0) {
+        ['Condition A', 'Condition B', 'Condition C'].forEach((condition) => {
+          const option = document.createElement('option');
+          option.value = condition;
+          option.textContent = condition;
+          conditionsSelect.appendChild(option);
+        });
+      }
+
+      if (actualOutcomeSelect && actualOutcomeSelect.options.length === 0) {
+        ['Win', 'Loss', 'Pending'].forEach((outcome) => {
+          const option = document.createElement('option');
+          option.value = outcome;
+          option.textContent = outcome;
+          actualOutcomeSelect.appendChild(option);
+        });
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', init_app);
+  </script>
+</body>
 </html>
