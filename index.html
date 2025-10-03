@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Underwriting Carrier Leaderboard</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 2rem;
+        background: #f5f5f5;
+        color: #1f2933;
+      }
+
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);
+        padding: 2.5rem;
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: clamp(2rem, 4vw, 3rem);
+        letter-spacing: -0.03em;
+      }
+
+      p {
+        line-height: 1.5;
+      }
+
+      .uploader {
+        margin-top: 2rem;
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .uploader label {
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .uploader input[type="file"] {
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem;
+        border: 1px dashed rgba(15, 23, 42, 0.2);
+        background: rgba(148, 163, 184, 0.15);
+        font-size: 1rem;
+      }
+
+      #leaderboard {
+        margin-top: 2.5rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        background: rgba(148, 163, 184, 0.12);
+        min-height: 8rem;
+        padding: 1.25rem 1.5rem;
+        font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        white-space: pre-wrap;
+      }
+
+      .carrier-count {
+        font-weight: 600;
+        color: #0f766e;
+      }
+
+      .error {
+        color: #b91c1c;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Underwriting Engine</h1>
+      <p>
+        Upload carrier underwriting guide exports to normalize the rule catalog and
+        preview placeholder leaderboard data. Imported carriers are stored only in
+        memory for this session.
+      </p>
+      <section class="uploader">
+        <label for="carrier-upload">Import carrier JSON files</label>
+        <input id="carrier-upload" type="file" accept="application/json" multiple />
+        <p id="import-status" aria-live="polite" class="carrier-count">No carriers loaded.</p>
+      </section>
+      <section id="leaderboard" data-role="leaderboard-placeholder">
+        Import carrier files to build a placeholder leaderboard.
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        carriers: [],
+      };
+
+      const OUTCOME_ORDER = [
+        "Decline",
+        "GI",
+        "Graded",
+        "Standard",
+        "Preferred",
+        "N/A",
+      ];
+
+      const CONDITION_LIST = [
+        { id: "atrial-fibrillation", name: "Atrial Fibrillation", aliases: ["Afib", "A-Fib", "Atrial Fib"] },
+        { id: "cad", name: "Coronary Artery Disease", aliases: ["CAD", "Coronary Disease"] },
+        { id: "copd", name: "Chronic Obstructive Pulmonary Disease", shortName: "COPD" },
+        { id: "diabetes-type-1", name: "Diabetes Mellitus (Type 1)", aliases: ["Type 1 Diabetes", "Diabetes Type I"] },
+        { id: "diabetes-type-2", name: "Diabetes Mellitus (Type 2)", aliases: ["Type 2 Diabetes", "Diabetes Type II"] },
+        { id: "hyperlipidemia", name: "Hyperlipidemia", aliases: ["High Cholesterol"] },
+        { id: "hypertension", name: "Hypertension", aliases: ["High Blood Pressure"] },
+        { id: "sleep-apnea", name: "Sleep Apnea" },
+        { id: "obesity", name: "Obesity", aliases: ["BMI"] },
+        { id: "cancer-history", name: "Cancer History", aliases: ["Cancer"] },
+        { id: "anxiety-depression", name: "Anxiety / Depression", aliases: ["Anxiety", "Depression"] },
+        { id: "parkinsons", name: "Parkinson's Disease", aliases: ["Parkinsons"] },
+      ];
+
+      const conditionOrderIndex = new Map(
+        CONDITION_LIST.map((condition, index) => [condition.id, index])
+      );
+
+      const conditionKeyIndex = (() => {
+        const index = new Map();
+        const addKeys = (value, target) => {
+          if (!value) return;
+          const keys = Array.isArray(value) ? value : [value];
+          for (const key of keys) {
+            if (!key) continue;
+            index.set(normalizeConditionKey(key), target);
+          }
+        };
+
+        for (const condition of CONDITION_LIST) {
+          addKeys(condition.id, condition);
+          addKeys(condition.name, condition);
+          addKeys(condition.shortName, condition);
+          addKeys(condition.aliases, condition);
+        }
+
+        return index;
+      })();
+
+      function clamp01(value) {
+        const numeric = Number.parseFloat(value);
+        if (!Number.isFinite(numeric)) return 0;
+        if (numeric <= 0) return 0;
+        if (numeric >= 1) return 1;
+        return numeric;
+      }
+
+      function normalizeConditionKey(value) {
+        return String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+      }
+
+      function normalizeOutcomeKey(value) {
+        return String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+      }
+
+      function lookupOutcomeRules(source, outcome) {
+        if (!source || typeof source !== "object") return undefined;
+        const targetKey = normalizeOutcomeKey(outcome);
+        for (const key of Object.keys(source)) {
+          if (normalizeOutcomeKey(key) === targetKey) {
+            return source[key];
+          }
+        }
+        return undefined;
+      }
+
+      function normalizeMedicationList(value) {
+        if (!value) return [];
+        const values = Array.isArray(value)
+          ? value
+          : String(value)
+              .split(/[,;\n]/g)
+              .map((item) => item.trim())
+              .filter(Boolean);
+        return values.map((item) => String(item).trim()).filter(Boolean);
+      }
+
+      function normalizeRuleEntry(entry) {
+        if (entry == null) return null;
+        if (typeof entry === "string") {
+          const text = entry.trim();
+          if (!text) return null;
+          return { text, medications: [], placeholder: false };
+        }
+
+        if (typeof entry !== "object") return null;
+
+        const text =
+          typeof entry.text === "string" && entry.text.trim()
+            ? entry.text.trim()
+            : typeof entry.rule === "string" && entry.rule.trim()
+            ? entry.rule.trim()
+            : "";
+        const medications = normalizeMedicationList(entry.medications || entry.meds || entry.rx);
+        const notes = typeof entry.notes === "string" ? entry.notes.trim() : undefined;
+        const source = typeof entry.source === "string" ? entry.source.trim() : undefined;
+
+        if (!text && medications.length === 0 && !notes) {
+          return null;
+        }
+
+        const result = {
+          text,
+          medications,
+          placeholder: Boolean(entry.placeholder),
+        };
+
+        if (notes) result.notes = notes;
+        if (source) result.source = source;
+
+        return result;
+      }
+
+      function normalizeRuleList(value) {
+        if (!value) return [];
+        const entries = Array.isArray(value) ? value : [value];
+        const normalized = [];
+        for (const item of entries) {
+          const rule = normalizeRuleEntry(item);
+          if (rule) normalized.push(rule);
+        }
+        return normalized;
+      }
+
+      function default_outcome_placeholders() {
+        const placeholders = {};
+        for (const outcome of OUTCOME_ORDER) {
+          placeholders[outcome] = [
+            {
+              text: `No ${outcome.toLowerCase()} guideline available`,
+              medications: [],
+              placeholder: true,
+            },
+          ];
+        }
+        return placeholders;
+      }
+
+      function normalize_condition_entry(entry) {
+        if (!entry) return null;
+
+        const rawCondition =
+          typeof entry === "string" ? { name: entry } : Array.isArray(entry) ? entry[1] : entry;
+
+        if (!rawCondition || typeof rawCondition !== "object") return null;
+
+        const conditionKey =
+          rawCondition.condition ||
+          rawCondition.id ||
+          rawCondition.name ||
+          (Array.isArray(entry) ? entry[0] : undefined);
+
+        const catalogEntry = conditionKeyIndex.get(normalizeConditionKey(conditionKey));
+        if (!catalogEntry) {
+          return null;
+        }
+
+        const outcomesSource =
+          rawCondition.outcomes ||
+          rawCondition.rules ||
+          rawCondition.underwriting ||
+          rawCondition;
+
+        const outcomes = {};
+        let hasRealRule = false;
+        const placeholders = default_outcome_placeholders();
+
+        for (const outcome of OUTCOME_ORDER) {
+          const rawRules = lookupOutcomeRules(outcomesSource, outcome);
+          const normalizedRules = normalizeRuleList(rawRules);
+          if (normalizedRules.length > 0) {
+            hasRealRule = true;
+            outcomes[outcome] = normalizedRules;
+          } else {
+            outcomes[outcome] = placeholders[outcome];
+          }
+        }
+
+        return {
+          id: catalogEntry.id,
+          name: catalogEntry.name,
+          placeholder: !hasRealRule,
+          outcomes,
+        };
+      }
+
+      function ensureArray(value) {
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        if (value instanceof Map) return Array.from(value.entries());
+        if (typeof value === "object") return Object.entries(value);
+        return [];
+      }
+
+      function normalize_profile(payload) {
+        const base = Array.isArray(payload)
+          ? payload[0]
+          : payload && typeof payload === "object" && payload.profile
+          ? payload.profile
+          : payload;
+
+        if (!base || typeof base !== "object") {
+          throw new TypeError("Invalid carrier profile payload");
+        }
+
+        const nameSource =
+          base.name ||
+          base.carrier ||
+          base.title ||
+          (typeof payload === "object" && payload.name ? payload.name : null) ||
+          "Unnamed Carrier";
+
+        const normalizedName = String(nameSource).trim() || "Unnamed Carrier";
+        const slug = normalizedName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+
+        const conditionEntries = ensureArray(
+          base.conditions || base.conditionMap || base.rules
+        );
+        const conditions = [];
+        const seenConditionIds = new Set();
+
+        for (const entry of conditionEntries) {
+          const normalizedCondition = normalize_condition_entry(entry);
+          if (!normalizedCondition) continue;
+          if (seenConditionIds.has(normalizedCondition.id)) continue;
+          seenConditionIds.add(normalizedCondition.id);
+          conditions.push(normalizedCondition);
+        }
+
+        for (const condition of CONDITION_LIST) {
+          if (seenConditionIds.has(condition.id)) continue;
+          conditions.push({
+            id: condition.id,
+            name: condition.name,
+            placeholder: true,
+            outcomes: default_outcome_placeholders(),
+          });
+        }
+
+        conditions.sort((a, b) => {
+          const orderA = conditionOrderIndex.get(a.id) ?? Number.POSITIVE_INFINITY;
+          const orderB = conditionOrderIndex.get(b.id) ?? Number.POSITIVE_INFINITY;
+          return orderA - orderB;
+        });
+
+        return {
+          name: normalizedName,
+          slug,
+          conditions,
+          metadata: {
+            importedAt: new Date().toISOString(),
+          },
+        };
+      }
+
+      function renderPlaceholderLeaderboard() {
+        const target = document.querySelector("#leaderboard");
+        if (!target) return;
+
+        if (state.carriers.length === 0) {
+          target.textContent = "Import carrier files to build a placeholder leaderboard.";
+          return;
+        }
+
+        const lines = [];
+        lines.push(`Loaded carriers: ${state.carriers.length}`);
+        lines.push("");
+        for (const carrier of state.carriers) {
+          lines.push(`• ${carrier.name}`);
+          const sampleCondition = carrier.conditions.find((condition) => !condition.placeholder);
+          if (sampleCondition) {
+            const sampleOutcome = OUTCOME_ORDER.find((outcome) => sampleCondition.outcomes[outcome]?.length);
+            const firstRule = sampleOutcome
+              ? sampleCondition.outcomes[sampleOutcome][0]
+              : null;
+            if (firstRule) {
+              lines.push(`  ↳ ${sampleCondition.name} → ${sampleOutcome}: ${firstRule.text}`);
+            }
+          }
+        }
+
+        target.textContent = lines.join("\n");
+      }
+
+      function dedupeCarrierName(name, usedNames) {
+        const baseName = name || "Carrier";
+        if (!usedNames.has(baseName)) {
+          return baseName;
+        }
+
+        let counter = 2;
+        let candidate = `${baseName} (${counter})`;
+        while (usedNames.has(candidate)) {
+          counter += 1;
+          candidate = `${baseName} (${counter})`;
+        }
+        return candidate;
+      }
+
+      async function readFileAsText(file) {
+        if (!file) return "";
+        if (typeof file.text === "function") {
+          return await file.text();
+        }
+
+        if (typeof FileReader === "undefined") {
+          throw new Error("FileReader is not available in this environment");
+        }
+
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+          reader.readAsText(file);
+        });
+      }
+
+      async function import_carrier_files(fileList) {
+        const files = Array.from(fileList || []);
+        if (files.length === 0) return;
+
+        const status = document.querySelector("#import-status");
+        const usedNames = new Set(state.carriers.map((carrier) => carrier.name));
+
+        for (const file of files) {
+          try {
+            const text = await readFileAsText(file);
+            if (!text.trim()) continue;
+            const parsed = JSON.parse(text);
+            const payloads = Array.isArray(parsed) ? parsed : [parsed];
+            for (const payload of payloads) {
+              const profile = normalize_profile(payload);
+              profile.name = dedupeCarrierName(profile.name, usedNames);
+              usedNames.add(profile.name);
+              state.carriers.push(profile);
+            }
+          } catch (error) {
+            console.error("Failed to import carrier file", file?.name, error);
+            if (status) {
+              status.textContent = `Error importing ${file?.name || "file"}: ${error.message}`;
+              status.classList.add("error");
+            }
+          }
+        }
+
+        if (status && !status.classList.contains("error")) {
+          status.textContent = `${state.carriers.length} carrier${
+            state.carriers.length === 1 ? "" : "s"
+          } loaded.`;
+          status.classList.remove("error");
+        }
+
+        renderPlaceholderLeaderboard();
+      }
+
+      document
+        .getElementById("carrier-upload")
+        .addEventListener("change", (event) => import_carrier_files(event.target.files));
+
+      window.OUTCOME_ORDER = OUTCOME_ORDER;
+      window.CONDITION_LIST = CONDITION_LIST;
+      window.clamp01 = clamp01;
+      window.default_outcome_placeholders = default_outcome_placeholders;
+      window.normalize_profile = normalize_profile;
+      window.import_carrier_files = import_carrier_files;
+      window.state = state;
+    </script>
+  </body>
+</html>
