@@ -1,6 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UWENGINE Evaluator</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --accent: #0066cc;
+      --border: #d0d7de;
+      --text: #1f2328;
+      --muted: #636c76;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+      display: grid;
+      gap: 2rem;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      margin-bottom: 0.25rem;
+    }
+
+    header p {
+      color: var(--muted);
+      margin-top: 0;
+    }
+
+    section {
+      background: var(--panel);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+      padding: 1.5rem;
+    }
+
+    .grid {
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+
   <meta charset="UTF-8">
   <title>Rule Evaluator</title>
 </head>
@@ -109,7 +173,6 @@ function best_rule_for_condition(cond, ctx) {
   return null;
 }
 </script>
-=======
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Carrier Leaderboard</title>
@@ -156,6 +219,55 @@ function best_rule_for_condition(cond, ctx) {
     label {
       display: flex;
       flex-direction: column;
+      font-weight: 600;
+      font-size: 0.95rem;
+      gap: 0.4rem;
+      color: var(--muted);
+    }
+
+    input[type="text"],
+    select,
+    textarea {
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.75rem;
+      font-size: 1rem;
+      background-color: var(--panel);
+      color: inherit;
+      min-width: 220px;
+    }
+
+    select[multiple] {
+      min-height: 160px;
+    }
+
+    textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    button {
+      border-radius: 999px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 0.75rem 1.5rem;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 10px 30px rgba(0, 102, 204, 0.18);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    button:not(:disabled):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 32px rgba(0, 102, 204, 0.25);
       gap: 0.4rem;
       font-size: 0.95rem;
       color: #ced4f2;
@@ -189,6 +301,66 @@ function best_rule_for_condition(cond, ctx) {
     table {
       width: 100%;
       border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+
+    thead {
+      background: rgba(15, 23, 42, 0.04);
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .status {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .status strong {
+      color: var(--accent);
+    }
+
+    .empty-placeholder {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .tooltip-cell {
+      cursor: help;
+    }
+
+    @media (max-width: 768px) {
+      main {
+        padding: 1.5rem 1rem 3rem;
+      }
+
+      section {
+        padding: 1.25rem;
+      }
+
+      button {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .form-row {
+        flex-direction: column;
+        align-items: stretch;
       background: #111722;
       border-radius: 8px;
       overflow: hidden;
@@ -228,6 +400,65 @@ function best_rule_for_condition(cond, ctx) {
   </style>
 </head>
 <body>
+  <main class="grid">
+    <header>
+      <h1>UWENGINE Evaluation Console</h1>
+      <p>Import evaluation inputs, run scoring, and keep a persistent activity log.</p>
+    </header>
+
+    <section aria-labelledby="controls-heading">
+      <div class="grid">
+        <div class="flex-between">
+          <h2 id="controls-heading">Evaluation Setup</h2>
+          <span class="status" id="evaluation-status"></span>
+        </div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="scenario-name">
+              Scenario Name
+              <input id="scenario-name" type="text" placeholder="e.g. Q4 2025 Rate Review" />
+            </label>
+            <label for="condition-select">
+              Conditions
+              <select id="condition-select" multiple></select>
+            </label>
+          </div>
+          <div class="form-row">
+            <label for="import-eval">
+              Import Eval Input (JSON)
+              <input id="import-eval" type="file" accept="application/json" />
+            </label>
+            <label for="import-decisions">
+              Import Carrier Decisions (JSON)
+              <input id="import-decisions" type="file" accept="application/json" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label for="notes">
+              Notes
+              <textarea id="notes" placeholder="Optional context to include in the log"></textarea>
+            </label>
+          </div>
+          <div class="form-row">
+            <button id="evaluate-btn" type="button">Evaluate</button>
+            <button id="log-btn" type="button" disabled>Log Result</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="leaderboard-heading">
+      <div class="flex-between">
+        <h2 id="leaderboard-heading">Leaderboard</h2>
+        <span class="status" id="decision-status"></span>
+      </div>
+      <table id="leaderboard-table" aria-describedby="leaderboard-heading">
+        <thead>
+          <tr>
+            <th scope="col">Rank</th>
+            <th scope="col">Carrier</th>
+            <th scope="col">Score</th>
+            <th scope="col">Details</th>
   <main>
     <section>
       <h1>Carrier Input</h1>
@@ -270,6 +501,20 @@ function best_rule_for_condition(cond, ctx) {
         </thead>
         <tbody></tbody>
       </table>
+    </section>
+
+    <section aria-labelledby="history-heading">
+      <div class="flex-between">
+        <h2 id="history-heading">Evaluation History</h2>
+        <button id="clear-history-btn" type="button">Clear History</button>
+      </div>
+      <table id="history-table" aria-describedby="history-heading">
+        <thead>
+          <tr>
+            <th scope="col">Timestamp</th>
+            <th scope="col">Scenario</th>
+            <th scope="col">Conditions</th>
+            <th scope="col">Top Carrier</th>
 
       <div class="actions">
         <label style="flex: 1 1 auto;">
@@ -294,6 +539,440 @@ function best_rule_for_condition(cond, ctx) {
   </main>
 
   <script>
+    /**
+     * @typedef {Object} CarrierDecision
+     * @property {string} carrierId
+     * @property {string} carrierName
+     * @property {number} premium
+     * @property {number} expectedLoss
+     * @property {number} serviceScore
+     * @property {string[]} strengths
+     * @property {string[]} weaknesses
+     */
+
+    /**
+     * @typedef {Object} EvalInput
+     * @property {string} scenario
+     * @property {string[]} conditions
+     * @property {string} [notes]
+     */
+
+    /**
+     * @typedef {Object} LeaderboardRow
+     * @property {number} rank
+     * @property {string} carrier
+     * @property {number} score
+     * @property {string} tooltip
+     */
+
+    const CONDITION_LIST = [
+      "Loss Ratio < 60%",
+      "Premium Growth",
+      "New Markets",
+      "Top Quartile Service",
+      "Claims Automation",
+      "Bundled Discounts",
+      "Data Transparency",
+      "Underwriting Flexibility",
+      "Financial Strength"
+    ];
+
+    const LOG_STORAGE_KEY = "uwengine:history";
+
+    /** @type {EvalInput | null} */
+    let currentEvalInput = {
+      scenario: "",
+      conditions: []
+    };
+
+    /** @type {CarrierDecision[]} */
+    let currentDecisions = [];
+
+    /** @type {EvalInput | null} */
+    let latestEvalInput = null;
+
+    /** @type {CarrierDecision[] | null} */
+    let latestCarrierDecisions = null;
+
+    /** @type {LeaderboardRow[]} */
+    let latestLeaderboardRows = [];
+
+    /** @type {Array<{ timestamp: string; input: EvalInput; decisions: CarrierDecision[]; leaderboard: LeaderboardRow[]; notes?: string }>} */
+    let evaluationLogs = [];
+
+    function readFileAsJson(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            resolve(JSON.parse(String(reader.result)));
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+      });
+    }
+
+    function getSelectedConditions() {
+      const select = document.getElementById("condition-select");
+      return Array.from(select.selectedOptions).map((option) => option.value);
+    }
+
+    function setStatus(message, type) {
+      const status = document.getElementById("evaluation-status");
+      if (!message) {
+        status.textContent = "";
+        return;
+      }
+      status.innerHTML = `<strong>${type ?? "Info"}:</strong> ${message}`;
+    }
+
+    function setDecisionStatus(message) {
+      const status = document.getElementById("decision-status");
+      status.textContent = message ?? "";
+    }
+
+    function applyEvalInputToForm(input) {
+      const scenarioField = document.getElementById("scenario-name");
+      const notesField = document.getElementById("notes");
+      const conditions = Array.isArray(input.conditions) ? input.conditions : [];
+
+      scenarioField.value = input.scenario ?? "";
+      notesField.value = input.notes ?? "";
+
+      const select = document.getElementById("condition-select");
+      Array.from(select.options).forEach((option) => {
+        option.selected = conditions.includes(option.value);
+      });
+    }
+
+    function loadLogsFromStorage() {
+      try {
+        const stored = window.localStorage.getItem(LOG_STORAGE_KEY);
+        if (!stored) return [];
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (error) {
+        console.warn("Unable to load stored logs", error);
+      }
+      return [];
+    }
+
+    function saveLogsToStorage() {
+      try {
+        window.localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(evaluationLogs));
+      } catch (error) {
+        console.warn("Unable to persist logs", error);
+      }
+    }
+
+    function render_leaderboard_placeholder() {
+      const table = document.getElementById("leaderboard-table");
+      const tbody = table.querySelector("tbody");
+      tbody.innerHTML = "";
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = 4;
+      cell.className = "empty-placeholder";
+      cell.textContent = "Run an evaluation to populate the leaderboard.";
+      row.appendChild(cell);
+      tbody.appendChild(row);
+    }
+
+    function render_leaderboard(rows) {
+      const table = document.getElementById("leaderboard-table");
+      const tbody = table.querySelector("tbody");
+      tbody.innerHTML = "";
+
+      if (!rows || rows.length === 0) {
+        render_leaderboard_placeholder();
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+
+        const rankCell = document.createElement("td");
+        rankCell.textContent = String(row.rank);
+
+        const carrierCell = document.createElement("td");
+        carrierCell.textContent = row.carrier;
+
+        const scoreCell = document.createElement("td");
+        scoreCell.textContent = row.score.toFixed(2);
+
+        const detailCell = document.createElement("td");
+        detailCell.className = "tooltip-cell";
+        detailCell.textContent = row.tooltip;
+        detailCell.title = row.tooltip;
+
+        tr.append(rankCell, carrierCell, scoreCell, detailCell);
+        tbody.appendChild(tr);
+      });
+    }
+
+    function render_history(tableEl, logs) {
+      const tbody = tableEl.querySelector("tbody");
+      tbody.innerHTML = "";
+
+      if (!logs || logs.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 4;
+        cell.className = "empty-placeholder";
+        cell.textContent = "No evaluations have been logged yet.";
+        row.appendChild(cell);
+        tbody.appendChild(row);
+        return;
+      }
+
+      logs.forEach((entry) => {
+        const tr = document.createElement("tr");
+        const timestampCell = document.createElement("td");
+        const scenarioCell = document.createElement("td");
+        const conditionsCell = document.createElement("td");
+        const topCarrierCell = document.createElement("td");
+
+        timestampCell.textContent = new Date(entry.timestamp).toLocaleString();
+        timestampCell.title = entry.timestamp;
+
+        scenarioCell.textContent = entry.input?.scenario ?? "Untitled Scenario";
+        scenarioCell.title = entry.input?.scenario ?? "Untitled Scenario";
+
+        const conditions = Array.isArray(entry.input?.conditions) && entry.input.conditions.length > 0
+          ? entry.input.conditions.join(", ")
+          : "None";
+        conditionsCell.textContent = conditions;
+        conditionsCell.title = conditions;
+
+        const topCarrier = entry.leaderboard?.[0]?.carrier ?? "Not evaluated";
+        const tooltip = entry.leaderboard?.[0]?.tooltip ?? "No leaderboard entry available.";
+        topCarrierCell.textContent = topCarrier;
+        topCarrierCell.title = tooltip;
+
+        tr.append(timestampCell, scenarioCell, conditionsCell, topCarrierCell);
+        tbody.appendChild(tr);
+      });
+    }
+
+    function scoreDecision(decision, selectedConditions) {
+      const premium = Number(decision.premium ?? 0);
+      const expectedLoss = Number(decision.expectedLoss ?? 0);
+      const service = Number(decision.serviceScore ?? 0);
+      const matchedConditions = Array.isArray(decision.strengths)
+        ? decision.strengths.filter((strength) => selectedConditions.includes(strength)).length
+        : 0;
+      const penalty = Array.isArray(decision.weaknesses)
+        ? decision.weaknesses.filter((weakness) => selectedConditions.includes(weakness)).length
+        : 0;
+
+      const profitability = premium - expectedLoss;
+      const normalizedService = Math.max(0, Math.min(service, 100)) / 100;
+
+      return profitability * (1 + normalizedService) + matchedConditions * 12 - penalty * 5;
+    }
+
+    function buildLeaderboard(decisions, evalInput) {
+      const selectedConditions = Array.isArray(evalInput.conditions) ? evalInput.conditions : [];
+      const rows = decisions.map((decision) => {
+        const score = scoreDecision(decision, selectedConditions);
+        const tooltipParts = [
+          `Premium: ${decision.premium?.toLocaleString?.() ?? decision.premium}`,
+          `Expected Loss: ${decision.expectedLoss?.toLocaleString?.() ?? decision.expectedLoss}`,
+          `Service: ${decision.serviceScore}`
+        ];
+        if (decision.strengths?.length) {
+          tooltipParts.push(`Strengths: ${decision.strengths.join(", ")}`);
+        }
+        if (decision.weaknesses?.length) {
+          tooltipParts.push(`Watch outs: ${decision.weaknesses.join(", ")}`);
+        }
+        return {
+          rank: 0,
+          carrier: decision.carrierName ?? decision.carrierId ?? "Unknown Carrier",
+          score,
+          tooltip: tooltipParts.filter(Boolean).join(" | ")
+        };
+      });
+
+      rows.sort((a, b) => b.score - a.score);
+      let lastScore = null;
+      let currentRank = 0;
+      rows.forEach((row, index) => {
+        if (lastScore === null || row.score < lastScore) {
+          currentRank = index + 1;
+          lastScore = row.score;
+        }
+        row.rank = currentRank;
+      });
+
+      return rows;
+    }
+
+    async function handleEvalImport(event) {
+      const [file] = event.target.files;
+      if (!file) return;
+
+      try {
+        const data = await readFileAsJson(file);
+        currentEvalInput = {
+          scenario: data.scenario ?? data.name ?? "",
+          conditions: Array.isArray(data.conditions) ? data.conditions : [],
+          notes: data.notes ?? ""
+        };
+        applyEvalInputToForm(currentEvalInput);
+        setStatus(`Imported evaluation input from ${file.name}`, "Success");
+      } catch (error) {
+        console.error("Failed to parse eval input", error);
+        setStatus(`Failed to read ${file.name}: ${error.message ?? error}`, "Error");
+      } finally {
+        event.target.value = "";
+      }
+    }
+
+    async function handleDecisionImport(event) {
+      const [file] = event.target.files;
+      if (!file) return;
+
+      try {
+        const data = await readFileAsJson(file);
+        if (!Array.isArray(data)) {
+          throw new Error("Carrier decision file must contain a JSON array.");
+        }
+        currentDecisions = data;
+        setDecisionStatus(`${data.length} decision${data.length === 1 ? "" : "s"} ready.`);
+        setStatus(`Loaded carrier decisions from ${file.name}`, "Success");
+      } catch (error) {
+        console.error("Failed to parse carrier decisions", error);
+        setStatus(`Failed to read ${file.name}: ${error.message ?? error}`, "Error");
+      } finally {
+        event.target.value = "";
+      }
+    }
+
+    function handleSelectionChange() {
+      const conditions = getSelectedConditions();
+      currentEvalInput = currentEvalInput || { scenario: "", conditions: [] };
+      currentEvalInput.conditions = conditions;
+    }
+
+    function handleEvaluate() {
+      if (!currentEvalInput) {
+        currentEvalInput = { scenario: "", conditions: [] };
+      }
+
+      const scenarioField = document.getElementById("scenario-name");
+      currentEvalInput.scenario = scenarioField.value.trim();
+      currentEvalInput.conditions = getSelectedConditions();
+      currentEvalInput.notes = document.getElementById("notes").value.trim();
+
+      if (!currentDecisions || currentDecisions.length === 0) {
+        setStatus("Import carrier decisions before evaluating.", "Warning");
+        render_leaderboard_placeholder();
+        return;
+      }
+
+      const leaderboard = buildLeaderboard(currentDecisions, currentEvalInput);
+      latestEvalInput = JSON.parse(JSON.stringify(currentEvalInput));
+      latestCarrierDecisions = JSON.parse(JSON.stringify(currentDecisions));
+      latestLeaderboardRows = leaderboard.map((row) => ({ ...row }));
+
+      render_leaderboard(leaderboard);
+      setStatus(`Evaluated ${leaderboard.length} carrier${leaderboard.length === 1 ? "" : "s"}.`, "Success");
+      document.getElementById("log-btn").disabled = false;
+    }
+
+    function handleLog() {
+      if (!latestEvalInput || !latestCarrierDecisions) {
+        setStatus("Run an evaluation before logging.", "Warning");
+        return;
+      }
+
+      const entry = {
+        timestamp: new Date().toISOString(),
+        input: latestEvalInput,
+        decisions: latestCarrierDecisions,
+        leaderboard: latestLeaderboardRows,
+        notes: latestEvalInput.notes ?? document.getElementById("notes").value.trim()
+      };
+
+      evaluationLogs = [entry, ...evaluationLogs];
+      saveLogsToStorage();
+      render_history(document.getElementById("history-table"), evaluationLogs);
+      setStatus("Evaluation logged to history.", "Success");
+    }
+
+    function handleClearHistory() {
+      evaluationLogs = [];
+      saveLogsToStorage();
+      render_history(document.getElementById("history-table"), evaluationLogs);
+      setStatus("History cleared.", "Info");
+    }
+
+    function init_app() {
+      const select = document.getElementById("condition-select");
+      select.innerHTML = "";
+      CONDITION_LIST.forEach((condition) => {
+        const option = document.createElement("option");
+        option.value = condition;
+        option.textContent = condition;
+        select.appendChild(option);
+      });
+
+      document.getElementById("import-eval").addEventListener("change", handleEvalImport);
+      document.getElementById("import-decisions").addEventListener("change", handleDecisionImport);
+      document.getElementById("condition-select").addEventListener("change", handleSelectionChange);
+      document.getElementById("evaluate-btn").addEventListener("click", handleEvaluate);
+      document.getElementById("log-btn").addEventListener("click", handleLog);
+      document.getElementById("clear-history-btn").addEventListener("click", handleClearHistory);
+
+      evaluationLogs = loadLogsFromStorage();
+      render_history(document.getElementById("history-table"), evaluationLogs);
+      render_leaderboard_placeholder();
+
+      if (!currentDecisions.length) {
+        currentDecisions = getSampleDecisions();
+        setDecisionStatus(`Loaded ${currentDecisions.length} sample decisions.`);
+      }
+    }
+
+    function getSampleDecisions() {
+      return [
+        {
+          carrierId: "nimbus",
+          carrierName: "Nimbus Mutual",
+          premium: 120000,
+          expectedLoss: 64000,
+          serviceScore: 82,
+          strengths: ["Top Quartile Service", "Claims Automation", "Data Transparency"],
+          weaknesses: ["Premium Growth"]
+        },
+        {
+          carrierId: "aurora",
+          carrierName: "Aurora Assurance",
+          premium: 128500,
+          expectedLoss: 72000,
+          serviceScore: 90,
+          strengths: ["Loss Ratio < 60%", "Financial Strength", "Underwriting Flexibility"],
+          weaknesses: ["Claims Automation"]
+        },
+        {
+          carrierId: "forward",
+          carrierName: "Forward Underwriters",
+          premium: 110750,
+          expectedLoss: 58000,
+          serviceScore: 74,
+          strengths: ["Bundled Discounts", "New Markets"],
+          weaknesses: ["Data Transparency", "Top Quartile Service"]
+        }
+      ];
+    }
+
+    document.addEventListener("DOMContentLoaded", init_app);
     const state = { carriers: [], logs: [] };
 
     function init_app() {
