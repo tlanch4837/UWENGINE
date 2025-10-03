@@ -1,0 +1,14 @@
+{
+  "name": "uwengine",
+  "version": "1.0.0",
+  "description": "Underwriting evaluation engine demo",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/run-tests.js"
+  },
+  "dependencies": {
+  },
+  "devDependencies": {
+  }
+}
