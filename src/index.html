@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Underwriting Evaluation Engine</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <h1>Underwriting Evaluation Engine</h1>
+    </header>
+    <main>
+      <section class="controls">
+        <div id="importBanner" class="banner" role="alert">Import carriers to run an evaluation.</div>
+        <div class="control-group">
+          <button id="importButton" class="primary">Import sample carriers</button>
+        </div>
+        <div class="control-group">
+          <label for="carrierSelect">Select carriers</label>
+          <select id="carrierSelect" multiple aria-describedby="carrierHelp"></select>
+          <small id="carrierHelp">Hold Ctrl (Windows) or Command (Mac) to select multiple carriers.</small>
+        </div>
+        <div class="control-group">
+          <label for="conditionsInput">Client conditions (JSON)</label>
+          <textarea id="conditionsInput" rows="6" spellcheck="false"></textarea>
+        </div>
+        <div class="control-group">
+          <button id="evalButton" class="primary" disabled>Evaluate</button>
+        </div>
+      </section>
+      <section>
+        <h2>Rules</h2>
+        <div id="ruleList" class="rule-container"></div>
+      </section>
+      <section>
+        <h2>Results</h2>
+        <div id="results" class="results"></div>
+      </section>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
