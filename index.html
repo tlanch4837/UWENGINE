@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Medication Adjustment Utilities</title>
+  <script>
+    function getOutcomeOrder(weights) {
+      if (!weights || typeof weights !== 'object') {
+        return [];
+      }
+
+      if (Array.isArray(weights.order)) {
+        return weights.order.slice();
+      }
+
+      if (Array.isArray(weights.__order)) {
+        return weights.__order.slice();
+      }
+
+      if (weights.metadata && Array.isArray(weights.metadata.order)) {
+        return weights.metadata.order.slice();
+      }
+
+      return Object.keys(weights).filter(function (key) {
+        return typeof weights[key] === 'number' && !Number.isNaN(weights[key]);
+      });
+    }
+
+    function normalizeAdjustmentValue(adj) {
+      if (typeof adj === 'number') {
+        return Number.isFinite(adj) ? adj : null;
+      }
+
+      if (adj && typeof adj === 'object' && typeof adj.value === 'number') {
+        return Number.isFinite(adj.value) ? adj.value : null;
+      }
+
+      if (typeof adj === 'string' && adj.trim() !== '') {
+        var parsed = Number(adj);
+        return Number.isNaN(parsed) ? null : parsed;
+      }
+
+      return null;
+    }
+
+    function prob_shift(weights, adj) {
+      if (!weights || typeof weights !== 'object') {
+        return;
+      }
+
+      var normalizedAdj = normalizeAdjustmentValue(adj);
+      if (normalizedAdj === null || normalizedAdj === 0) {
+        return;
+      }
+
+      var order = getOutcomeOrder(weights);
+      if (order.length < 2) {
+        return;
+      }
+
+      var total = order.reduce(function (sum, key) {
+        var value = weights[key];
+        if (typeof value !== 'number' || Number.isNaN(value)) {
+          weights[key] = 0;
+          return sum;
+        }
+
+        return sum + value;
+      }, 0);
+
+      if (total <= 0) {
+        return;
+      }
+
+      var amountToMove = 0.1 * Math.abs(normalizedAdj) * total;
+      if (amountToMove <= 0) {
+        return;
+      }
+
+      if (normalizedAdj > 0) {
+        var remainingPositive = amountToMove;
+        for (var i = 0; i < order.length - 1 && remainingPositive > 0; i += 1) {
+          var donorKeyPositive = order[i];
+          var receiverKeyPositive = order[i + 1];
+
+          if (typeof weights[donorKeyPositive] !== 'number' || Number.isNaN(weights[donorKeyPositive])) {
+            weights[donorKeyPositive] = 0;
+          }
+
+          if (typeof weights[receiverKeyPositive] !== 'number' || Number.isNaN(weights[receiverKeyPositive])) {
+            weights[receiverKeyPositive] = 0;
+          }
+
+          var availablePositive = Math.min(weights[donorKeyPositive], remainingPositive);
+          if (availablePositive > 0) {
+            weights[donorKeyPositive] -= availablePositive;
+            weights[receiverKeyPositive] += availablePositive;
+            remainingPositive -= availablePositive;
+          }
+        }
+      } else {
+        var remainingNegative = amountToMove;
+        for (var j = order.length - 1; j > 0 && remainingNegative > 0; j -= 1) {
+          var donorKeyNegative = order[j];
+          var receiverKeyNegative = order[j - 1];
+
+          if (typeof weights[donorKeyNegative] !== 'number' || Number.isNaN(weights[donorKeyNegative])) {
+            weights[donorKeyNegative] = 0;
+          }
+
+          if (typeof weights[receiverKeyNegative] !== 'number' || Number.isNaN(weights[receiverKeyNegative])) {
+            weights[receiverKeyNegative] = 0;
+          }
+
+          var availableNegative = Math.min(weights[donorKeyNegative], remainingNegative);
+          if (availableNegative > 0) {
+            weights[donorKeyNegative] -= availableNegative;
+            weights[receiverKeyNegative] += availableNegative;
+            remainingNegative -= availableNegative;
+          }
+        }
+      }
+    }
+
+    function apply_medication_adjustments(weights, carrierCond, medsLower) {
+      if (!weights || typeof weights !== 'object' || !carrierCond || typeof carrierCond !== 'object') {
+        return;
+      }
+
+      var medications = Array.isArray(carrierCond.medications) ? carrierCond.medications : [];
+      if (medications.length === 0) {
+        return;
+      }
+
+      var clientMedsSet = new Set();
+      if (Array.isArray(medsLower)) {
+        medsLower.forEach(function (med) {
+          if (typeof med === 'string' && med.trim() !== '') {
+            clientMedsSet.add(med.trim().toLowerCase());
+          } else if (med && typeof med === 'object' && typeof med.name === 'string') {
+            clientMedsSet.add(med.name.trim().toLowerCase());
+          }
+        });
+      }
+
+      if (clientMedsSet.size === 0) {
+        return;
+      }
+
+      medications.forEach(function (medication) {
+        if (!medication || typeof medication !== 'object') {
+          return;
+        }
+
+        var medName = '';
+        if (typeof medication.name === 'string') {
+          medName = medication.name.trim().toLowerCase();
+        } else if (typeof medication.med === 'string') {
+          medName = medication.med.trim().toLowerCase();
+        }
+
+        if (!medName || !clientMedsSet.has(medName)) {
+          return;
+        }
+
+        var adjustments = [];
+        if (Array.isArray(medication.adjustments)) {
+          adjustments = medication.adjustments;
+        } else if (Array.isArray(medication.adjustment)) {
+          adjustments = medication.adjustment;
+        } else if (medication.adjustments && typeof medication.adjustments === 'object') {
+          adjustments = Object.values(medication.adjustments);
+        } else if (medication.adjustment !== undefined) {
+          adjustments = [medication.adjustment];
+        }
+
+        adjustments.forEach(function (adjustment) {
+          var value = normalizeAdjustmentValue(adjustment);
+          if (value !== null) {
+            prob_shift(weights, value);
+          }
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+</body>
+</html>
