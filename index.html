@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Carrier Decisions Leaderboard</title>
+  </head>
+  <body>
+    <script>
+      const GLOBAL_SCOPE = typeof globalThis !== "undefined" ? globalThis : window;
+
+      function outcomeOrder() {
+        const order = GLOBAL_SCOPE && Array.isArray(GLOBAL_SCOPE.OUTCOME_ORDER)
+          ? GLOBAL_SCOPE.OUTCOME_ORDER
+          : [];
+        return order;
+      }
+
+      function compareByOutcomeOrder(labelA, labelB) {
+        const order = outcomeOrder();
+        const indexA = order.indexOf(labelA);
+        const indexB = order.indexOf(labelB);
+
+        if (indexA === -1 && indexB === -1) {
+          return String(labelA).localeCompare(String(labelB));
+        }
+
+        if (indexA === -1) {
+          return 1;
+        }
+
+        if (indexB === -1) {
+          return -1;
+        }
+
+        return indexA - indexB;
+      }
+
+      function normalizeProbabilityMix(mix) {
+        const entries = [];
+
+        if (mix == null) {
+          return entries;
+        }
+
+        if (mix instanceof Map) {
+          mix.forEach((value, key) => {
+            const probability = Number(value);
+            if (!Number.isNaN(probability)) {
+              entries.push({ label: key, probability });
+            }
+          });
+          return entries;
+        }
+
+        if (Array.isArray(mix)) {
+          mix.forEach((entry, index) => {
+            if (entry == null) {
+              return;
+            }
+
+            if (Array.isArray(entry)) {
+              if (entry.length >= 2) {
+                const probability = Number(entry[1]);
+                if (!Number.isNaN(probability)) {
+                  const label = entry[0] ?? outcomeOrder()[index];
+                  entries.push({ label, probability });
+                }
+              }
+              return;
+            }
+
+            if (typeof entry === "object") {
+              const label = entry.label ?? entry.outcome ?? outcomeOrder()[index];
+              const probability = Number(
+                entry.probability ??
+                  entry.value ??
+                  entry.percent ??
+                  entry.pct ??
+                  entry.weight
+              );
+              if (label != null && !Number.isNaN(probability)) {
+                entries.push({ label, probability });
+              }
+              return;
+            }
+
+            if (typeof entry === "number") {
+              const probability = Number(entry);
+              if (!Number.isNaN(probability)) {
+                const label = outcomeOrder()[index];
+                entries.push({ label, probability });
+              }
+            }
+          });
+          return entries;
+        }
+
+        if (typeof mix === "object") {
+          Object.entries(mix).forEach(([key, value]) => {
+            if (value == null) {
+              return;
+            }
+
+            if (typeof value === "number") {
+              const probability = Number(value);
+              if (!Number.isNaN(probability)) {
+                entries.push({ label: key, probability });
+              }
+              return;
+            }
+
+            if (typeof value === "object") {
+              const label = value.label ?? value.outcome ?? key;
+              const probability = Number(
+                value.probability ??
+                  value.value ??
+                  value.percent ??
+                  value.pct ??
+                  value.weight
+              );
+              if (label != null && !Number.isNaN(probability)) {
+                entries.push({ label, probability });
+              }
+            }
+          });
+        }
+
+        return entries;
+      }
+
+      function best_predicted_label(mix) {
+        const entries = normalizeProbabilityMix(mix);
+        if (entries.length === 0) {
+          return undefined;
+        }
+
+        entries.sort((a, b) => {
+          if (b.probability !== a.probability) {
+            return b.probability - a.probability;
+          }
+          return compareByOutcomeOrder(a.label, b.label);
+        });
+
+        return entries[0].label;
+      }
+
+      function probabilityTooltip(entries) {
+        if (!entries.length) {
+          return "";
+        }
+
+        const ordered = [...entries].sort((a, b) => compareByOutcomeOrder(a.label, b.label));
+        return ordered
+          .map((entry) => `${entry.label}: ${String(entry.probability)}`)
+          .join("\n");
+      }
+
+      function extractProbabilityForLabel(entries, label) {
+        if (!label) {
+          return undefined;
+        }
+        const found = entries.find((entry) => entry.label === label);
+        return found ? found.probability : undefined;
+      }
+
+      function resolveCarrierName(decision) {
+        if (!decision) {
+          return "";
+        }
+        if (typeof decision.carrier === "string") {
+          return decision.carrier;
+        }
+        if (decision.carrier && typeof decision.carrier === "object") {
+          if (typeof decision.carrier.name === "string") {
+            return decision.carrier.name;
+          }
+        }
+        if (typeof decision.carrier_name === "string") {
+          return decision.carrier_name;
+        }
+        return decision.name ?? "";
+      }
+
+      function resolveStrictOutcome(decision) {
+        if (!decision) {
+          return undefined;
+        }
+        return (
+          decision.strict_outcome ??
+          decision.strictOutcome ??
+          decision.strict ??
+          decision.outcome ??
+          undefined
+        );
+      }
+
+      function resolveProbabilityMix(decision) {
+        if (!decision) {
+          return undefined;
+        }
+        return (
+          decision.probability_mix ??
+          decision.probabilityMix ??
+          decision.mix ??
+          decision.prediction_mix ??
+          decision.predictionMix ??
+          decision.probabilities ??
+          undefined
+        );
+      }
+
+      function build_leaderboard(decisions) {
+        if (!Array.isArray(decisions)) {
+          return [];
+        }
+
+        const rows = decisions.map((decision) => {
+          const mix = resolveProbabilityMix(decision);
+          const entries = normalizeProbabilityMix(mix);
+          const predicted = best_predicted_label(mix);
+          const probability = extractProbabilityForLabel(entries, predicted);
+          const tooltip = probabilityTooltip(entries);
+
+          return {
+            carrier: resolveCarrierName(decision),
+            strict: resolveStrictOutcome(decision),
+            predicted,
+            probability,
+            tooltip,
+          };
+        });
+
+        const order = outcomeOrder();
+        const fallbackIndex = order.length;
+
+        rows.sort((a, b) => {
+          const aIndex = order.indexOf(a.predicted);
+          const bIndex = order.indexOf(b.predicted);
+          const normalizedA = aIndex === -1 ? fallbackIndex : aIndex;
+          const normalizedB = bIndex === -1 ? fallbackIndex : bIndex;
+
+          if (normalizedA !== normalizedB) {
+            return normalizedA - normalizedB;
+          }
+
+          const probA = typeof a.probability === "number" ? a.probability : -Infinity;
+          const probB = typeof b.probability === "number" ? b.probability : -Infinity;
+
+          if (probA !== probB) {
+            return probB - probA;
+          }
+
+          return String(a.carrier).localeCompare(String(b.carrier));
+        });
+
+        return rows;
+      }
+
+      GLOBAL_SCOPE.best_predicted_label = best_predicted_label;
+      GLOBAL_SCOPE.build_leaderboard = build_leaderboard;
+    </script>
+  </body>
+</html>
