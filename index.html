@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UWENGINE Logs</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1>UWENGINE Logs</h1>
+        <p>Export and import generated outcome logs.</p>
+      </header>
+      <section class="app__controls">
+        <button id="exportLogsButton" type="button">Export logs</button>
+        <label class="file-input">
+          <span class="file-input__label">Import logs</span>
+          <input id="importLogsInput" type="file" accept="application/json" />
+        </label>
+      </section>
+      <section class="app__status" aria-live="polite">
+        <p id="statusMessage" class="status-message" hidden></p>
+      </section>
+      <section class="app__table">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Timestamp</th>
+              <th scope="col">Summary</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody"></tbody>
+        </table>
+      </section>
+    </main>
+    <script src="scripts/app.js" type="module"></script>
+  </body>
+</html>

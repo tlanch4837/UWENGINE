@@ -1,0 +1,152 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+  background: #f6f8fb;
+  color: #1f2933;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.app__header h1 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.75rem, 5vw, 2.75rem);
+}
+
+.app__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+button,
+.file-input__label {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+button:hover,
+.file-input__label:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.2);
+}
+
+button:focus-visible,
+.file-input__label:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.5);
+  outline-offset: 3px;
+}
+
+.file-input input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-input {
+  position: relative;
+  overflow: hidden;
+}
+
+.app__table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08);
+}
+
+.app__table th,
+.app__table td {
+  padding: 0.85rem 1rem;
+  text-align: left;
+}
+
+.app__table thead {
+  background: #1f2937;
+  color: #fff;
+}
+
+.app__table tbody tr:nth-child(every) {
+  background: #f9fafb;
+}
+
+.app__table tbody tr:nth-child(2n) {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.status-message {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.status-message[hidden] {
+  display: none;
+}
+
+.status-message[data-variant='error'] {
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+}
+
+.status-message[data-variant='success'] {
+  background: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #0f172a;
+    color: #e2e8f0;
+  }
+
+  .app__table table {
+    background: rgba(15, 23, 42, 0.9);
+  }
+
+  .app__table thead {
+    background: rgba(15, 23, 42, 0.85);
+  }
+
+  .status-message {
+    background: rgba(59, 130, 246, 0.25);
+    color: #93c5fd;
+  }
+
+  .status-message[data-variant='error'] {
+    background: rgba(239, 68, 68, 0.25);
+    color: #fecaca;
+  }
+
+  .status-message[data-variant='success'] {
+    background: rgba(34, 197, 94, 0.25);
+    color: #bbf7d0;
+  }
+}
